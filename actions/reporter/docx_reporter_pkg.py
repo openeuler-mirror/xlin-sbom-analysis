@@ -12,15 +12,59 @@
 # MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
 # See the Mulan PSL v2 for more details.
 
+from actions.reporter.reporter_toolkit import analyze_licenses
+from actions.license_helper import LICENSE_CATEGORY_DETAILS
+
+
 def _generate_dep_license_section_docx():
     """
     生成许可证分析部分的DOCX内容
     """
 
-def _generate_license_section_docx():
+
+def _generate_license_section_docx(doc, license_summary):
     """
     生成许可证分析部分的DOCX内容
+
+    Args:
+        doc (Document): python-docx文档对象，用于添加内容
+        license_summary (dict): 许可证摘要信息，包含许可证类型及其出现次数
+
+    Returns:
+        None: 该函数直接修改传入的doc对象，不返回任何值
     """
+
+    if not license_summary:
+        doc.add_paragraph("未发现许可证信息。")
+        return
+
+    # 创建从scancode_category到详细信息的映射
+    category_to_detail = {item["scancode_category"]
+        : item for item in LICENSE_CATEGORY_DETAILS}
+
+    analysis = analyze_licenses(license_summary)
+    doc.add_paragraph(f"该软件包包含：")
+
+    # 生成类别统计
+    for category, count in analysis["category_counts"].items():
+        if category in category_to_detail:
+            desc = category_to_detail[category]["description"]
+            doc.add_paragraph(f"{count}种{desc}", style='圆点')
+
+    # 输出非零类别的具体许可证
+    for category, licenses_set in analysis["category_licenses"].items():
+        if licenses_set and category != "Unknown":
+            doc.add_paragraph(f"其中{category}的许可证如下：")
+            for lic in sorted(licenses_set):
+                doc.add_paragraph(f"{lic}", style='圆点')
+
+            # 添加suggestion内容
+            suggestion = category_to_detail[category]["suggestion"]
+            doc.add_paragraph(f"{suggestion}")
+            doc.add_paragraph()
+
+    doc.add_paragraph()
+
 
 def _generate_dep_vulnerability_table_docx(doc, packages):
     """
@@ -70,6 +114,7 @@ def _generate_dep_vulnerability_table_docx(doc, packages):
 
     doc.add_paragraph()
 
+
 def _generate_vulnerability_table_docx(doc, package):
     """
     生成软件包漏洞信息表格并添加到DOCX文档中
@@ -112,6 +157,7 @@ def _generate_vulnerability_table_docx(doc, package):
                 paragraph.style = '表格内容'
 
     doc.add_paragraph()
+
 
 def generate_docx_report():
     """
