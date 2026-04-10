@@ -16,10 +16,76 @@ from actions.reporter.reporter_toolkit import analyze_licenses
 from actions.license_helper import LICENSE_CATEGORY_DETAILS
 
 
-def _generate_dep_license_section_docx():
+def _generate_dep_license_section_docx(doc, license_summary, categorized_dict):
     """
     生成许可证分析部分的DOCX内容
+
+    Args:
+        doc (Document): python-docx文档对象，用于添加内容
+        license_summary (dict): 许可证摘要信息，包含许可证类型及其出现次数
+        categorized_dict (dict): 按许可证类别分类的软件包字典，键为许可证类别，值为Package对象列表
+
+    Returns:
+        None: 该函数直接修改传入的doc对象，不返回任何值
     """
+
+    if not license_summary:
+        doc.add_paragraph("未发现许可证信息。")
+        return
+
+    # 创建从scancode_category到详细信息的映射
+    category_to_detail = {item["scancode_category"]: item for item in LICENSE_CATEGORY_DETAILS}
+
+    analysis = analyze_licenses(license_summary)
+    doc.add_paragraph(f"该软件包的依赖项包含：")
+
+    # 生成类别统计
+    for category, count in analysis["category_counts"].items():
+        if category in category_to_detail:
+            desc = category_to_detail[category]["description"]
+            doc.add_paragraph(f"{count}种{desc}", style='圆点')
+
+    doc.add_paragraph()
+
+    # 生成许可证表格
+    for category, pkgs in categorized_dict.items():
+        if not pkgs or category not in category_to_detail:
+            continue
+
+        doc.add_paragraph(f"其中具备 {category} 许可证的依赖项如下：")
+
+        # 添加suggestion内容
+        suggestion = category_to_detail[category]["suggestion"]
+        doc.add_paragraph(f"{suggestion}")
+
+        # 创建表格
+        table = doc.add_table(rows=1, cols=3)
+        table.style = 'Table Grid'
+
+        # 添加表头
+        hdr_cells = table.rows[0].cells
+        hdr_cells[0].text = '依赖项名'
+        hdr_cells[1].text = '版本'
+        hdr_cells[2].text = '许可证'
+
+        # 应用表头样式
+        for cell in hdr_cells:
+            for paragraph in cell.paragraphs:
+                paragraph.style = '表格标题'
+
+        # 填充表格数据
+        for pkg in pkgs:
+            row_cells = table.add_row().cells
+            row_cells[0].text = f"{pkg.name}"
+            row_cells[1].text = f"{pkg.version}"
+            row_cells[2].text = pkg.license
+
+            # 应用表格内容样式
+            for cell in row_cells:
+                for paragraph in cell.paragraphs:
+                    paragraph.style = '表格内容'
+
+        doc.add_paragraph()
 
 
 def _generate_license_section_docx(doc, license_summary):
