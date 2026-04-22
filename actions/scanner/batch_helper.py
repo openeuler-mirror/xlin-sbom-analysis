@@ -27,13 +27,22 @@ from actions.scanner.vulnerability_helper import (
 )
 from actions.license_helper import (
     split_license,
-    get_license_category
+    get_license_category,
+    filter_licenses,
+    count_licenses,
+    licenses_visualization,
 )
 from actions.data_helper import (
+    setup_paths,
+    get_scan_dates,
+    save_docx_report,
+    read_data_from_json,
+    convert_docx_to_pdf,
     download_file,
-    SUPPORTED_ARCHIVES
-    )
+    save_data_to_json,
+    SUPPORTED_ARCHIVES)
 from actions.package import Package
+import actions.reporter.docx_reporter_pkg as pkg_docx
 
 
 def _scan_source_code(type_, path, dep_scan_file, config, max_workers, disable_tqdm):
@@ -198,7 +207,77 @@ def _print_summary_table(packages):
 def _process_package_from_row(row, args, formatted_utc_time, config):
     """
     处理从CSV文件读取的单行数据（一个软件包）。
+
+    Args:
+        row (dict): CSV文件中的一行数据，包含软件包的名称、版本、类型和路径等信息
+        args (argparse.Namespace): 命令行参数对象，包含输出路径、最大工作线程数等配置
+        formatted_utc_time (str): 格式化的时间字符串，用于生成文件名
+        config (dict): 配置对象，包含扫描和报告生成相关的配置信息
+
+    Returns:
+        tuple: 包含两个元素的元组
+            - Package对象: 成功处理的软件包对象，如果处理失败则为None
+            - str: 错误信息，如果处理成功则为None
     """
+
+    name = row.get('name')
+    version = row.get('version')
+    type_ = row.get('type')
+    path = row.get('path')
+
+    if not all([name, version, type_, path]):
+        return None, "CSV 行缺少必要字段 (name, version, type, path)。"
+
+    logging.info(f"正在处理 {name}-{version}")
+
+    try:
+        base_name = f"{name}-{version}_{formatted_utc_time}"
+        paths = setup_paths(args.output, base_name)
+        package = Package(name, version, None)
+
+        scanned_files = _scan_source_code(
+            type_, path, paths["dep_scan_results"], config, args.max_workers, args.disable_tqdm)
+        package.append_files(scanned_files)
+
+        licenses_summary = []
+        if package.files:
+            save_data_to_json(package.files, paths["files_info"])
+            licenses = [file['license']
+                        for file in package.files if 'license' in file]
+            licenses_summary = filter_licenses(count_licenses(licenses))
+            licenses_visualization(
+                licenses_summary, paths["licenses_pie_chart"])
+
+        dep_license_summary = []
+        if os.path.exists(paths["dep_scan_results"]):
+            dependencies_data = read_data_from_json(paths["dep_scan_results"])
+            _process_dependencies(package, dependencies_data, config)
+            dep_license_summary = filter_licenses(
+                dependencies_data.get('license_summary', []))
+            licenses_visualization(
+                dep_license_summary, paths["dep_licenses_pie_chart"])
+
+        logging.info(f"正在分析 {name}-{version} 的漏洞信息")
+        osv_data = _add_vulnerabilities_to_package(package, config)
+        if osv_data:
+            save_data_to_json(osv_data, paths["vulns_record"])
+
+        start_date, end_date = get_scan_dates(config)
+        report, summary, result = pkg_docx.generate_docx_report(
+            start_date, end_date, package, licenses_summary,
+            paths["licenses_pie_chart"], dep_license_summary,
+            paths["dep_licenses_pie_chart"], config
+        )
+        package.set_scan_result(result, summary)
+
+        save_docx_report(report, paths["docx_report"])
+        convert_docx_to_pdf(paths["docx_report"], paths["output_dir"])
+        logging.info(f"安全引入评估报告已保存至: {paths['output_dir']}")
+        return package, None
+
+    except Exception as e:
+        logging.debug(f"处理 {name}-{version} 时发生致命错误: {e}", exc_info=True)
+        return None, str(e)
 
 
 def scan_batch(args, formatted_utc_time, config):
