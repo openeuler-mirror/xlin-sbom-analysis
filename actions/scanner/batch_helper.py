@@ -17,6 +17,8 @@ import tempfile
 import logging
 import shutil
 import subprocess
+import textwrap
+from tabulate import tabulate
 from actions.scanner.src_package_helper import (
     scan_src_dir,
     scan_src_rpm
@@ -201,7 +203,57 @@ def _add_vulnerabilities_to_package(package, config):
 def _print_summary_table(packages):
     """
     打印软件包扫描结果的汇总表格
+
+    Args:
+        packages (list): Package对象列表，每个对象包含软件包的扫描结果信息
+
+    Returns:
+        None: 该函数仅打印输出表格，不返回任何值
     """
+
+    print()
+    table_data = []
+    for pkg in packages:
+        summary = pkg.scan_result.get("summary", ["", "", "", ""])
+        row = [
+            pkg.name,
+            pkg.version,
+            summary[0],  # 本体漏洞总结
+            summary[1],  # 本体许可证风险总结
+            summary[2],  # 依赖项漏洞总结
+            summary[3]   # 依赖项许可证风险总结
+        ]
+        table_data.append(row)
+
+    if not table_data:
+        print("无拒绝引入项。")
+        return
+
+    headers = [
+        "包名",
+        "版本",
+        "本体漏洞",
+        "本体许可证风险",
+        "依赖项漏洞",
+        "依赖项许可证风险"
+    ]
+
+    max_widths = [15, 10, 23, 23, 23, 23]
+
+    wrapped_data = []
+    for row in table_data:
+        wrapped_row = []
+        for i, cell in enumerate(row):
+            if max_widths[i] and len(str(cell)) > max_widths[i]:
+                wrapped_cell = textwrap.fill(str(cell), width=max_widths[i])
+                wrapped_row.append(wrapped_cell)
+            else:
+                wrapped_row.append(cell)
+        wrapped_data.append(wrapped_row)
+
+    print("批量扫描结果：")
+    print(tabulate(wrapped_data, headers=headers,
+          tablefmt="grid", maxcolwidths=max_widths))
 
 
 def _process_package_from_row(row, args, formatted_utc_time, config):
