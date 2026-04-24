@@ -18,6 +18,7 @@ import logging
 import shutil
 import subprocess
 import textwrap
+import csv
 from tabulate import tabulate
 from actions.scanner.src_package_helper import (
     scan_src_dir,
@@ -42,6 +43,7 @@ from actions.data_helper import (
     convert_docx_to_pdf,
     download_file,
     save_data_to_json,
+    log_scan_summary,
     SUPPORTED_ARCHIVES)
 from actions.package import Package
 import actions.reporter.docx_reporter_pkg as pkg_docx
@@ -335,4 +337,46 @@ def _process_package_from_row(row, args, formatted_utc_time, config):
 def scan_batch(args, formatted_utc_time, config):
     """
     批量扫描多个软件包，生成安全引入评估报告。
+
+    Args:
+        args (argparse.Namespace): 命令行参数对象，包含batch、output、max_workers、disable_tqdm等属性
+        formatted_utc_time (str): 格式化的时间字符串，用于生成唯一的文件名
+        config (dict): 配置字典，包含扫描和报告生成的相关配置
+
+    Returns:
+        None: 该函数不返回任何值，直接生成报告文件并记录日志
     """
+
+    all_package_rows = []
+    failed_packages = []
+    processed_packages = []
+
+    try:
+        with open(args.batch, 'r', encoding='utf-8') as f:
+            reader = csv.DictReader(f)
+            if sorted(reader.fieldnames) != sorted(['name', 'version', 'type', 'path']):
+                logging.error("格式错误，CSV文件头必须包含 name, version, type, path 四列。")
+                return
+            all_package_rows = list(reader)
+    except FileNotFoundError:
+        logging.error(f"CSV 文件未找到: {args.batch}")
+        return
+    except Exception as e:
+        logging.error(f"读取 CSV 文件时出错: {e}")
+        return
+
+    for row in all_package_rows:
+        package, error_msg = _process_package_from_row(
+            row, args, formatted_utc_time, config)
+        if error_msg:
+            failed_packages.append({
+                'name': row.get('name'),
+                'version': row.get('version'),
+                'error': error_msg
+            })
+        if package:
+            processed_packages.append(package)
+
+    log_scan_summary(len(all_package_rows), failed_packages)
+    if config.get('batch_scan', {}).get('summary_display'):
+        _print_summary_table(processed_packages)
