@@ -1,26 +1,29 @@
-# XiLing SBOM Analyzer
+# XiLing SBOM Analyzer User Manual
 
-XiLing SBOM Analyzer is a Docker container-based automated analysis tool for performing security assessments on source code repositories, batches of source code packages, or SBOM files and generating detailed reports. This manual will guide you through building the image and performing scans and analyses.
+## Overview
+
+XiLing SBOM Analyzer is a Docker container-based automated security assessment tool. It is designed to perform security analysis on source code repositories, batches of source code packages, or SBOM files and generate comprehensive reports. This manual provides guidance on loading the image and executing scans.
 
 ## System Requirements
 
 - **Docker**: Version 18.09.1 or higher
 - **Disk Space**: At least 3GB free space
 - **Memory**: 4GB or more recommended
+- **Network**: Required to access external software repositories and vulnerability databases
 
 ## Loading the Image
 
-If you have obtained the offline image file, please load it as follows:
+If you have obtained the offline image file, please follow these steps:
 
-1.  Obtain the `xiling-analyzer-latest.tar` image file.
-2.  Open a terminal and navigate to the directory containing the image file.
-3.  Execute the following command to load the image:
+1. Obtain the `xiling-analyzer-latest.tar` image file.
+2. Open a terminal and navigate to the directory containing the file.
+3. Execute the following command to load the image:
 
 ```bash
 docker load -i xiling-analyzer-latest.tar
 ```
 
-4.  Verify that the image was loaded successfully:
+4. Verify the loading was successful:
 
 ```bash
 docker images | grep xiling-analyzer
@@ -30,101 +33,114 @@ docker images | grep xiling-analyzer
 
 ### Scan Mode Overview
 
-Choose one of the following three modes based on your needs:
+Choose one of the following three modes based on your requirements:
 
-| Mode | Command Parameter | Input Source | Typical Use Case |
-|------|-------------------|--------------|------------------|
-| SBOM Analysis | `--sbom` / `-s` | SBOM file (SPDX 2.x) | In-depth analysis based on an existing SBOM |
-| Single Repository Scan | `--repo` / `-r` | Online repository URL | Scanning packages for a specific distribution |
-| Batch Scan (in development) | `--batch` / `-b` | Local CSV file | Bulk scanning of multiple specified source code projects |
+| Mode | Parameter | Input Source | Typical Use Case |
+| :--- | :--- | :--- | :--- |
+| **Repository Scan** | `--repo` / `-r` | Online Repository URL | Scanning packages for a specific distribution |
+| **Batch Scan** | `--batch` / `-b` | Local CSV file | Bulk scanning of multiple specified source projects |
+| **SBOM Analysis** | `--sbom` / `-s` | SBOM file (SPDX 2.x) | In-depth analysis based on an existing SBOM |
 
 ### Basic Command Structure
 
-All scan modes follow the same basic command format:
+All scan modes follow a consistent command format:
 
 ```bash
-docker run --rm -v <host_output_directory>:/app/output xiling-analyzer:latest <scan_mode> --output /app/output [other_parameters]
+docker run --rm -v <host_output_dir>:/app/output xiling-analyzer:latest <scan_mode> --output /app/output [other_parameters]
 ```
 
-### Mode 1: SBOM Scan
+---
 
-Perform an in-depth security analysis based on an existing SBOM file.
+### Mode 1: Scanning a Single Repository
+
+This mode is designed for online software repositories and supports two methods:
+
+#### Method A: Automatic Scanning of Latest Packages (Recommended)
+Provide the repository root URL; the tool automatically detects and scans the latest package information.
 
 **Command Format:**
 ```bash
-docker run --rm -v <host_data_directory>:/app/data -v <host_output_directory>:/app/output xiling-analyzer:latest --sbom /app/data/<SBOM_file> --output /app/output
+docker run --rm -v <host_output_dir>:/app/output xiling-analyzer:latest --repo <repository_root_URL> --output /app/output
 ```
 
 **Usage Example:**
 ```bash
 # Linux/Mac
+docker run --rm -v $(pwd)/reports:/app/output xiling-analyzer:latest \
+  --repo https://dl-cdn.openeuler.openatom.cn/openEuler-24.03-LTS/ \
+  --output /app/output
+
+# Windows PowerShell
+docker run --rm -v ${PWD}/reports:/app/output xiling-analyzer:latest \
+  --repo https://dl-cdn.openeuler.openatom.cn/openEuler-24.03-LTS/ \
+  --output /app/output
+```
+
+#### Method B: Specifying a specific primary.xml file
+Provide the full URL to a `primary.xml.gz` file. Useful for scanning specific historical versions.
+
+**Command Format:**
+```bash
+docker run --rm -v <host_output_dir>:/app/output xiling-analyzer:latest --repo <primary_xml_URL> --output /app/output
+```
+
+---
+
+### Mode 2: Batch Scan
+
+Use a CSV file to define multiple scan tasks simultaneously. Ideal for unified evaluation of multiple projects.
+
+**Command Format:**
+```bash
+docker run --rm -v <host_data_dir>:/app/data -v <host_output_dir>:/app/output xiling-analyzer:latest --batch /app/data/<csv_file> --output /app/output
+```
+
+**CSV File Format:**
+
+| Field | Description | Example |
+| :--- | :--- | :--- |
+| `name` | Package Name | foo |
+| `version` | Version Number | 1.1.1 |
+| `type` | Source Type (git/url) | git |
+| `path` | Repository or Download URL | [https://github.com/foo/foo.git](https://github.com/foo/foo.git) |
+
+**Example CSV Content:**
+```csv
+name,version,type,path
+foo,1.1.1,git,https://github.com/foo/foo.git
+bar,1.0,url,https://github.com/bar/bar/archive/refs/tags/v1.0.tar.gz
+baz,2.3.0,git,https://gitlab.com/baz/baz-project.git
+```
+
+**Usage Example:**
+```bash
 docker run --rm -v $(pwd):/app/data -v $(pwd)/reports:/app/output xiling-analyzer:latest \
-  --sbom /app/data/sbom.json \
-  --output /app/output
-
-# Windows PowerShell
-docker run --rm -v ${PWD}:/app/data -v ${PWD}/reports:/app/output xiling-analyzer:latest \
-  --sbom /app/data/sbom.json \
+  --batch /app/data/batch.csv \
   --output /app/output
 ```
 
-> **Note**: Currently, only SBOM files in SPDX 2.X format are supported.
+---
 
-### Mode 2: Scanning Repository
+### Mode 3: SBOM Scan
 
-This mode is specifically designed for scanning online software repository and supports two methods:
-
-#### Method A: Automatic Scanning of the Latest Packages (Recommended)
-
-Provide the repository root URL, and the tool will automatically detect and scan the latest package information.
+Perform security analysis based on an existing SBOM file.
 
 **Command Format:**
 ```bash
-docker run --rm -v <host output directory>:/app/output xiling-analyzer:latest --repo <repository root URL> --output /app/output
+docker run --rm -v <host_data_dir>:/app/data -v <host_output_dir>:/app/output xiling-analyzer:latest --sbom /app/data/<SBOM_file> --output /app/output
 ```
 
-**Usage Examples:**
-```bash
-# Linux/Mac
-docker run --rm -v $(pwd)/reports:/app/output xiling-analyzer:latest \
-  --repo https://dl-cdn.openeuler.openatom.cn/openEuler-24.03-LTS/ \
-  --output /app/output
+> **Note**: Currently, only **SPDX 2.X** format is supported.
 
-# Windows PowerShell
-docker run --rm -v ${PWD}/reports:/app/output xiling-analyzer:latest \
-  --repo https://dl-cdn.openeuler.openatom.cn/openEuler-24.03-LTS/ \
-  --output /app/output
-```
-
-#### Method B: Specifying a Specific primary.xml File
-
-Provide the full URL of the `primary.xml.gz` file. This is suitable for scenarios where you need to scan a specific version or historical version.
-
-**Command Format:**
-```bash
-docker run --rm -v <host output directory>:/app/output xiling-analyzer:latest --repo <primary.xml file URL> --output /app/output
-```
-
-**Usage Examples:**
-```bash
-# Linux/Mac
-docker run --rm -v $(pwd)/reports:/app/output xiling-analyzer:latest \
-  --repo https://dl-cdn.openeuler.openatom.cn/openEuler-24.03-LTS/update/source/repodata/25f85b6e3808d6cc265685aa496c2ab0772b05e964802fa68df40ec550630c29-primary.xml.gz \
-  --output /app/output
-
-# Windows PowerShell
-docker run --rm -v ${PWD}/reports:/app/output xiling-analyzer:latest \
-  --repo https://dl-cdn.openeuler.openatom.cn/openEuler-24.03-LTS/update/source/repodata/25f85b6e3808d6cc265685aa496c2ab0772b05e964802fa68df40ec550630c29-primary.xml.gz \
-  --output /app/output
-```
+---
 
 ## Advanced Configuration
 
 ### Using a Configuration File
 
-For users requiring customized scanning behavior, detailed settings can be configured via a JSON configuration file.
+Customize scan behavior via a JSON configuration file.
 
-**Configuration File Example:**
+**Configuration Example (`config.json`):**
 ```json
 {
     "general": {
@@ -136,112 +152,97 @@ For users requiring customized scanning behavior, detailed settings can be confi
         "author": "Alice",
         "reviewer": "Bob",
         "cve_only": true
-    }
+    },
+    "batch_scan": {
+        "include_file_patterns": [
+            "*.c", "*.h", "*.cpp", "*.hpp", "*.java", "*.py",
+            "*.js", "*.ts", "*.go", "*.rs", "*.php", "*.rb",
+            "*license*", "*LICENSE*", "*copyright*", "*COPYRIGHT*"
+        ],
+        "exclude_file_patterns": [],
+        "summary_display": true
+    },
+    "repo_scan": {},
+    "sbom_scan": {}
 }
 ```
 
-**Key Parameter Description:**
+**Key Parameter Descriptions:**
 
-| Parameter | Type | Description | Default Value |
-|-----------|------|-------------|---------------|
-| `general.cve_only` | Boolean | `true`: Show only CVE vulnerabilities; `false`: Show all vulnerabilities | `false` |
-| `general.author` | String | Report author information | - |
-| `general.reviewer` | String | Report reviewer information | - |
+| Parameter | Type | Description | Default |
+| :--- | :--- | :--- | :--- |
+| `general.cve_only` | Boolean | `true`: Show only CVEs; `false`: Show all vulnerabilities | `false` |
+| `general.author` | String | Report author name | - |
+| `batch_scan.include_file_patterns` | Array | File patterns included for license analysis | [Common languages] |
+| `batch_scan.summary_display` | Boolean | Whether to show scan summary in console | `true` |
 
-**Command Example Using a Configuration File:**
+**Command Example with Config:**
 ```bash
-# Linux/Mac
 docker run --rm -v $(pwd)/reports:/app/output -v $(pwd)/config.json:/app/config.json xiling-analyzer:latest \
-  --sbom /app/data/sbom.json \
-  --output /app/output \
-  --config /app/config.json
-
-# Windows PowerShell
-docker run --rm -v ${PWD}/reports:/app/output -v ${PWD}/config.json:/app/config.json xiling-analyzer:latest \
-  --sbom /app/data/sbom.json \
+  --repo <repository_URL> \
   --output /app/output \
   --config /app/config.json
 ```
 
 ### Optional Parameters
 
-- `--max-workers <number>`: Set the maximum number of concurrent threads (default: number of CPU cores)
-- `--disable-tqdm`: Disable progress bar display (suitable for automated environments)
-- `--config <config_file_path>`: Specify the external configuration file path
+- `--max-workers <number>`: Set maximum concurrent threads (Default: CPU core count).
+- `--disable-tqdm`: Disable progress bars (recommended for CI/CD environments).
+- `--config <path>`: Specify external configuration file path.
+
+**Example:**
+```bash
+docker run --rm -v ./reports:/app/output xiling-analyzer:latest \
+  --repo <repository_URL> \
+  --output /app/output \
+  --max-workers 4 \
+  --disable-tqdm
+```
 
 ## Output Results
 
-Upon completion of the scan, reports will be saved in your specified output directory, containing the following files:
+Reports are saved in the specified output directory:
 
 | File/Directory | Format | Description |
-|----------------|--------|-------------|
-| `Security_Introduction_Assessment_Report.docx` | Word Document | Detailed Word format security assessment report |
-| `Security_Introduction_Assessment_Report.pdf` | PDF Document | PDF format report for easy distribution |
-| `analysis_output/` | Directory | Contains detailed scan result data |
-| &nbsp;&nbsp;├── `vulnerability_scan_results` | JSON File | Detailed vulnerability scan results for all components |
-| &nbsp;&nbsp;├── `license_scan_results` | JSON File | License detection and analysis results |
-| &nbsp;&nbsp;└── `license_distribution_chart` | PNG Image | Pie chart visualization of license distribution |
+| :--- | :--- | :--- |
+| `Security_Assessment_Report.docx` | Word | Detailed security assessment report |
+| `Security_Assessment_Report.pdf` | PDF | Report for distribution |
+| `analysis_output/` | Directory | Raw scan data and assets |
+| ├── `vulnerability_scan_results` | JSON | Detailed vulnerability data for all components |
+| ├── `license_scan_results` | JSON | License detection and analysis results |
+| └── `license_distribution_chart` | PNG | Visualization of license distribution |
 
 ## Troubleshooting
 
 ### Common Issues
 
 #### Q: "OpenBLAS" error during runtime
+**Error:** `pthread_create failed... Operation not permitted`
 
-**Error Message:**
+**Solution:** Add the `--security-opt seccomp=unconfined` flag to your Docker command:
 ```bash
-OpenBLAS blas_thread_init: pthread_create failed for thread 1 of 12: Operation not permitted
-OpenBLAS blas_thread_init: ensure that your address space and process count limits are big enough (ulimit -a)
-...
-```
-
-**Solution:**
-Add the `--security-opt seccomp=unconfined` parameter when running the container:
-
-```bash
-docker run --rm --security-opt seccomp=unconfined -v ./reports:/app/output xiling-analyzer:latest \
-  --sbom /app/data/sbom.json \
-  --output /app/output
+docker run --rm --security-opt seccomp=unconfined ...
 ```
 
 ### Problem Diagnosis Steps
 
-If you encounter technical issues, please troubleshoot using the following steps:
-
-1.  **Check the Docker Environment**
-    ```bash
-    docker --version
-    docker info
-    ```
-
-2.  **Verify Image Loading**
-    ```bash
-    docker images | grep xiling-analyzer
-    ```
-
-3.  **Check Directory Permissions**
-    - Ensure the mounted directory exists and has read/write permissions.
-    - Avoid using system-protected directories (e.g., `/root`, `/system`).
-
-4.  **Verify Input File Formats**
-    - CSV files: Check field separators and encoding format.
-    - SBOM files: Confirm they are in SPDX 2.X format.
+1. **Check Docker Environment**: `docker version` and `docker info`.
+2. **Verify Image**: `docker images | grep xiling-analyzer`.
+3. **Check Permissions**: Ensure the host directory is writable and not a system-protected path (like `/root`).
+4. **Validate Input**: Check CSV encoding/separators and ensure SBOM is SPDX 2.X.
 
 ## Getting Support
 
-If you encounter problems while using the tool:
+1. **Review Documentation**: Check if the issue is addressed here.
+2. **Check Configuration**: Confirm Docker version and disk space.
+3. **Collect Information**: Record complete logs and the exact command used.
 
-1.  **Review This Document**: First, check if the problem is already addressed in the documentation.
-2.  **Check Environment Configuration**: Confirm that the Docker version, disk space, etc., meet the requirements.
-3.  **Collect Error Information**: Record the complete error logs and command-line output.
-4.  **Provide Environment Details**: Include information such as the operating system, Docker version, and image version.
-
-For further technical support, please provide:
-- Complete error message screenshots or logs
-- The specific command used
-- Sample input files (e.g., CSV file contents)
-- Operating system and Docker version information
+For technical support, please provide:
+- Screenshots or text logs of the error.
+- The command you executed.
+- Sample input files (e.g., CSV snippet).
+- OS and Docker version details.
 
 ---
 
-**Happy analyzing!** We welcome your feedback and suggestions for improvement.
+**Happy analyzing!** We welcome your feedback and suggestions.
