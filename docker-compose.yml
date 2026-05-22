@@ -1,0 +1,15 @@
+services:
+  analyzer:
+    image: xiling-analyzer:latest
+    build: .
+    security_opt:
+      - seccomp:unconfined
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    volumes:
+      - .:/app/data
+      - ./config/config.json:/app/assist/config.json
+      - ./templates:/app/templates
+      - ./logs:/app/logs
+
+    entrypoint: ["python3", "/app/xiling-analyzer.py"]
