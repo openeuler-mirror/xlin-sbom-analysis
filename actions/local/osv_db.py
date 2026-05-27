@@ -25,8 +25,44 @@ class OSVdb:
         self.index_name = index_name
 
     # --- 索引维护与数据导入部分 ---
-    def get_mapping():
+    def get_mapping(self):
         """获取索引映射定义"""
+        return {
+            "mappings": {
+                "dynamic": "true", 
+                "properties": {
+                    "id": {"type": "keyword"},
+                    "modified": {"type": "date"},
+                    "published": {"type": "date"},
+                    "withdrawn": {"type": "date"},
+                    "aliases": {"type": "keyword", "index": False},
+                    "upstream": {"type": "keyword", "index": False},
+                    "related": {"type": "keyword", "index": False},
+                    "summary": {"type": "text"},
+                    "details": {"type": "text"},
+                    "severity": {"type": "object"},
+                    "affected": {
+                        "type": "nested",
+                        "properties": {
+                            "package": {
+                                "properties": {
+                                    "ecosystem": {"type": "keyword"},
+                                    "name": {"type": "keyword"},
+                                    "purl": {"type": "keyword"}
+                                }
+                            },
+                            "ranges": {"type": "object", "enabled": False},
+                            "versions": {"type": "keyword"},
+                            "ecosystem_specific": {"type": "object", "enabled": False},
+                            "database_specific": {"type": "object", "enabled": False}
+                        }
+                    },
+                    "references": {"type": "object", "enabled": False},
+                    "credits": {"type": "object", "enabled": False},
+                    "database_specific": {"type": "object", "enabled": False}
+                }
+            }
+        }
 
     def create_index():
         """创建索引（如果不存在）"""
