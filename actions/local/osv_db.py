@@ -64,8 +64,10 @@ class OSVdb:
             }
         }
 
-    def create_index():
+    def create_index(self):
         """创建索引（如果不存在）"""
+        if not self.es.indices.exists(index=self.index_name):
+            self.es.indices.create(index=self.index_name, body=self.get_mapping())
 
     def delete_index():
         """删除索引"""
