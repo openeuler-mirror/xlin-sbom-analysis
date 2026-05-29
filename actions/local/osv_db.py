@@ -69,8 +69,12 @@ class OSVdb:
         if not self.es.indices.exists(index=self.index_name):
             self.es.indices.create(index=self.index_name, body=self.get_mapping())
 
-    def delete_index():
-        """删除索引"""
+    def delete_index(self):
+        if self.es.indices.exists(index=self.index_name):
+            self.es.indices.delete(index=self.index_name, ignore_unavailable=True)
+            print(f"[*] 索引 '{self.index_name}' 已成功删除。")
+        else:
+            print(f"[!] 索引 '{self.index_name}' 不存在，无需删除。")
 
     @staticmethod
     def _read_single_json():
