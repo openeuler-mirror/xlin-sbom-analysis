@@ -13,6 +13,7 @@
 # See the Mulan PSL v2 for more details.
 
 
+import orjson
 from elasticsearch import Elasticsearch
 
 
@@ -77,8 +78,13 @@ class OSVdb:
             print(f"[!] 索引 '{self.index_name}' 不存在，无需删除。")
 
     @staticmethod
-    def _read_single_json():
+    def _read_single_json(file_path):
         """静态方法：用于多进程读取文件"""
+        try:
+            with open(file_path, 'rb') as f:
+                return orjson.loads(f.read())
+        except Exception:
+            return None
 
     def _generate_actions():
         """批量操作生成器"""
