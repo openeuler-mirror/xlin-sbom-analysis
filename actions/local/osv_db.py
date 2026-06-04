@@ -86,8 +86,15 @@ class OSVdb:
         except Exception:
             return None
 
-    def _generate_actions():
+    def _generate_actions(self, data_batch):
         """批量操作生成器"""
+        for data in data_batch:
+            if data:
+                yield {
+                    "_index": self.index_name,
+                    "_id": data.get("id"),
+                    "_source": data
+                }
 
     def ingest_from_dir():
         """
