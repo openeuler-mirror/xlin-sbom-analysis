@@ -13,8 +13,13 @@
 # See the Mulan PSL v2 for more details.
 
 
+import os
+import glob
+import json
 import orjson
-from elasticsearch import Elasticsearch
+from concurrent.futures import ProcessPoolExecutor, as_completed
+from tqdm import tqdm
+from elasticsearch import Elasticsearch, helpers
 
 
 class OSVdb:
@@ -96,10 +101,46 @@ class OSVdb:
                     "_source": data
                 }
 
-    def ingest_from_dir():
+    def ingest_from_dir(self, dir_path, batch_size=5000):
         """
         从目录快速导入 OSV 数据
         """
+        search_pattern = os.path.join(dir_path, "**", "*.json")
+        json_files = glob.glob(search_pattern, recursive=True)
+        
+        total_files = len(json_files)
+        if total_files == 0:
+            print(f"[-] 未在 {dir_path} 发现 JSON 文件。")
+            return
+
+        print(f"[+] 发现 {total_files} 个文件，开始导入...")
+        self.create_index()
+        pbar = tqdm(total=total_files, desc="Ingesting OSV Data", unit="file")
+
+        with ProcessPoolExecutor() as executor:
+            for i in range(0, total_files, batch_size):
+                chunk_files = json_files[i : i + batch_size]
+                futures = [executor.submit(self._read_single_json, f) for f in chunk_files]
+                
+                batch_data = []
+                for future in as_completed(futures):
+                    result = future.result()
+                    if result:
+                        batch_data.append(result)
+                    pbar.update(1)
+                
+                if batch_data:
+                    try:
+                        success, errors = helpers.bulk(self.es, self._generate_actions(batch_data), raise_on_error=False)
+                        if errors:
+                            with open("ingest_errors.log", "a", encoding="utf-8") as f:
+                                for error_item in errors:
+                                    f.write(json.dumps(error_item) + "\n")
+                    except Exception as e:
+                        print(f"\n[!] 批量写入异常: {e}")
+        
+        pbar.close()
+        print("[+] 导入任务完成。")
     # --- 查询部分 ---
     def _extract_fixed_version():
         """提取修复版本"""
