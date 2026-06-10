@@ -142,8 +142,13 @@ class OSVdb:
         pbar.close()
         print("[+] 导入任务完成。")
     # --- 查询部分 ---
-    def _extract_fixed_version():
+    def _extract_fixed_version(self, affected_item):
         """提取修复版本"""
+        for r in affected_item.get('ranges', []):
+            for event in r.get('events', []):
+                if 'fixed' in event:
+                    return event['fixed']
+        return "N/A"
 
     def query_vulnerability():
         """
