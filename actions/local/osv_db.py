@@ -20,6 +20,7 @@ import orjson
 from concurrent.futures import ProcessPoolExecutor, as_completed
 from tqdm import tqdm
 from elasticsearch import Elasticsearch, helpers
+from actions.local.version_comparator import VersionComparator
 
 
 class OSVdb:
@@ -150,10 +151,70 @@ class OSVdb:
                     return event['fixed']
         return "N/A"
 
-    def query_vulnerability():
+    def query_vulnerability(self, ecosystem, package_name, version):
         """
         查询特定生态、包名和版本的漏洞
         """
+        query = {
+            "query": {
+                "nested": {
+                    "path": "affected",
+                    "query": {
+                        "bool": {
+                            "must": [
+                                {"term": {"affected.package.ecosystem": ecosystem}},
+                                {"term": {"affected.package.name": package_name}}
+                            ],
+                            "should": [
+                                # 如果 versions 数组里直接包含这个字符串，优先匹配
+                                {"term": {"affected.versions": version}}
+                            ]
+                        }
+                    }
+                }
+            }
+        }
+        
+        hits = helpers.scan(self.es, query=query, index=self.index_name)
+        results = []
+
+        for hit in hits:
+            source = hit['_source']
+            for affected_item in source.get('affected', []):
+                pkg = affected_item.get('package', {})
+                if (pkg.get('ecosystem') == ecosystem and pkg.get('name') == package_name):
+                    is_hit = False
+                    # 1. 匹配确切版本列表
+                    if version in affected_item.get('versions', []):
+                        is_hit = True
+                    
+                    # 2. 匹配范围逻辑
+                    if not is_hit:
+                        for r in affected_item.get('ranges', []):
+                            if VersionComparator.is_in_range(version, r.get('events', [])):
+                                is_hit = True
+                                break
+                    
+                    if is_hit:
+                        vuln_info = {
+                            "id": source.get("id"),
+                            "modified": source.get("modified"),
+                            "published": source.get("published"),
+                            "withdrawn": source.get("withdrawn"),
+                            "aliases": source.get("aliases", []),
+                            "upstream": source.get("upstream", []),
+                            "related": source.get("related", []),
+                            "summary": source.get("summary"),
+                            "details": source.get("details"),
+                            "severity": source.get("severity", []),
+                            "references": source.get("references", []),
+                            "credits": source.get("credits", []),
+                            "database_specific": source.get("database_specific"),
+                            "fixed": self._extract_fixed_version(affected_item)
+                        }
+                        results.append(vuln_info)
+                        break
+        return results
     def get_by_id():
         """直接通过漏洞 ID 获取完整原始数据"""
         
