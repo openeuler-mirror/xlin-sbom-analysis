@@ -1,4 +1,11 @@
 {
+    "elastic_search": {
+        "hosts": [
+            "http://localhost:9200"
+        ],
+        "index_name": "osv_vulnerability_db",
+        "api_key": ""
+    },
     "general": {
         "report_version": "V1.0",
         "date_setting": {
