@@ -19,7 +19,7 @@ import time
 from actions.scanner.repo_helper import scan_repo
 from actions.scanner.sbom_helper import scan_sbom
 from actions.data_helper import read_data_from_json
-from actions import LOG_DIR, ASSIST_DIR
+from actions import LOG_DIR, ASSIST_DIR, naming
 
 
 def _parse_arguments():
@@ -153,7 +153,8 @@ def main():
 
     timestamp = time.time()
     utc_time_tuple = time.gmtime(timestamp)
-    formatted_utc_time = time.strftime("%Y%m%d%H%M%S", utc_time_tuple)
+    formatted_utc_time = time.strftime(
+        naming.RUN_TIMESTAMP_FORMAT, utc_time_tuple)
 
     _setup_logging(formatted_utc_time)
     args = _parse_arguments()

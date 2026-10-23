@@ -15,6 +15,7 @@
 
 import logging
 import os
+from actions import naming
 from actions.license_helper import (
     split_license,
     get_license_category,
@@ -100,7 +101,11 @@ def _process_spdx_sbom(sbom, disable_tqdm, data_dir, config):
             osv_vulnerability = query_osv_vulnerability(name, version, config)
             if osv_vulnerability:
                 vulns_record = os.path.join(
-                    data_dir, f"{name}-{version} 漏洞扫描结果.json")
+                    data_dir,
+                    naming.build_file_name(
+                        naming.build_package_name(name, version),
+                        naming.VULN_RESULTS_NAME,
+                        naming.JSON_EXT))
                 save_data_to_json(osv_vulnerability, vulns_record)
 
             vulns = osv_vulnerability.get(
@@ -190,8 +195,7 @@ def scan_sbom(args, formatted_utc_time, config):
     # SPDX 2.x
     if sbom.get('spdxVersion') in SUPPORTED_SPDX_VERSIONS:
         sbom_name = sbom.get('name')
-        base_name = f"{sbom_name}_{formatted_utc_time}"
-        paths = setup_paths(args.output, base_name)
+        paths = setup_paths(args.output, sbom_name, formatted_utc_time)
 
         logging.info(f"正在扫描 SPDX SBOM: {sbom_name}")
         packages, failed_packages = _process_spdx_sbom(

@@ -20,7 +20,9 @@ import os
 import tempfile
 import xml.etree.ElementTree as ET
 import datetime
+from urllib.parse import unquote, urlsplit
 from typing import List, Tuple
+from actions import naming
 from actions.package import Package
 from actions.license_helper import (
     split_license,
@@ -116,7 +118,11 @@ def _scan_primary_xml(file_path: str, data_dir: str, disable_tqdm: bool, config)
             osv_vulnerability = query_osv_vulnerability(name, ver, config)
             if osv_vulnerability:
                 vulns_record = os.path.join(
-                    data_dir, f"{name}-{ver}.{rel} 漏洞扫描结果.json")
+                    data_dir,
+                    naming.build_file_name(
+                        f"{name}-{ver}.{rel}",
+                        naming.VULN_RESULTS_NAME,
+                        naming.JSON_EXT))
                 save_data_to_json(osv_vulnerability, vulns_record)
 
             vulns = osv_vulnerability.get("vulns", [])
@@ -143,13 +149,13 @@ def _scan_primary_xml(file_path: str, data_dir: str, disable_tqdm: bool, config)
 
 
 
-def _scan_repomd(repomd_path, base_repo_url):
+def _scan_repomd(repomd_path, update_source_url):
     """
     扫描并解析repomd.xml文件，提取primary数据的URL和时间戳
 
     Args:
         repomd_path (str): repomd.xml文件的本地路径
-        base_repo_url (str): 基础仓库URL地址
+        update_source_url (str): update/source目录的完整URL地址
 
     Returns:
         tuple: 包含两个元素的元组：
@@ -197,13 +203,13 @@ def _scan_repomd(repomd_path, base_repo_url):
         try:
             timestamp_int = int(timestamp_str)
             formatted_date = datetime.datetime.fromtimestamp(
-                timestamp_int).strftime("%Y-%m-%d")
+                timestamp_int).strftime(naming.DATE_FORMAT)
         except ValueError:
             logging.error(f"时间戳格式无效: {timestamp_str}")
             return None, None
 
         # 拼接完整的URL
-        primary_url = f"{base_repo_url}/update/source/{href.lstrip('/')}"
+        primary_url = f"{update_source_url}/{href.lstrip('/')}"
         return primary_url, formatted_date  # 返回格式化后的日期
 
     except ET.ParseError as e:
@@ -227,10 +233,74 @@ def _extract_primary_xml(text):
              如果不包含，则返回原始输入文本
     """
 
-    before, separator, after = text.partition("primary.xml")
+    before, separator, after = text.partition(naming.PRIMARY_XML_NAME)
     if separator:
-        return "primary.xml" + after
+        return naming.PRIMARY_XML_NAME + after
     return text
+
+def _get_update_source_url(repo_url):
+    """
+    获取仓库的 update/source 目录地址。
+
+    支持传入仓库根地址或已经包含 update/source 的地址，避免重复拼接。
+
+    Args:
+        repo_url (str): 仓库根地址或 update/source 地址
+
+    Returns:
+        str: update/source 目录地址
+    """
+
+    suffix = f"/{naming.UPDATE_SOURCE_PATH}"
+    base_url = repo_url.rstrip('/')
+    if base_url.endswith(suffix):
+        return base_url
+    return f"{base_url}{suffix}"
+
+
+def _extract_distro_name(repo_url):
+    """
+    从仓库地址中提取发行版名称。
+
+    优先取 "/update/" 前一段路径作为发行版名称，例如
+    "https://.../openEuler-24.03-LTS-SP1/update/source/" 返回
+    "openEuler-24.03-LTS-SP1"；无法识别时回退为路径最后一段。
+
+    Args:
+        repo_url (str): 仓库地址或 primary.xml 地址
+
+    Returns:
+        str: 发行版名称
+    """
+
+    path = unquote(urlsplit(repo_url).path)
+    parts = [part for part in path.split('/') if part]
+
+    for index, part in enumerate(parts):
+        if part.lower() == naming.UPDATE_SEGMENT and index > 0:
+            return parts[index - 1]
+
+    if parts:
+        return parts[-1]
+
+    fallback = os.path.basename(repo_url.rstrip('/'))
+    return fallback or naming.UNKNOWN_NAME
+
+
+def _format_target_name(distro_name, modified_date):
+    """
+    生成报告使用的扫描对象名称。
+
+    Args:
+        distro_name (str): 发行版名称
+        modified_date (str): 仓库修改日期，支持 "YYYY-MM-DD" 或 "YYYYMMDD"
+
+    Returns:
+        str: 形如 "openEuler-24.03-LTS-SP1-20261022" 的名称
+    """
+
+    return naming.build_target_name(distro_name, modified_date)
+
 
 def scan_repo(args, formatted_utc_time, config):
     """
@@ -246,38 +316,48 @@ def scan_repo(args, formatted_utc_time, config):
     """
 
     base_repo_url = args.repo.rstrip('/')
-    repo_name = os.path.basename(base_repo_url)
-    base_name = f"{repo_name}_{formatted_utc_time}"
-    paths = setup_paths(args.output, base_name)
+    repo_name = _extract_distro_name(base_repo_url)
 
     with tempfile.TemporaryDirectory() as temp_dir:
-        if base_repo_url.endswith('.gz') or base_repo_url.endswith('.zst'):
+        if base_repo_url.endswith(naming.PRIMARY_XML_SUFFIXES):
             # 指定扫描
             primary_xml_path = os.path.join(
                 temp_dir, _extract_primary_xml(base_repo_url))
-            target_name = f"{base_repo_url}"
+            modified_date = datetime.date.today().strftime(
+                naming.COMPACT_DATE_FORMAT)
 
             if not download_file(base_repo_url, primary_xml_path):
                 logging.error(f"从 {base_repo_url} 下载 primary.xml 时出错。")
                 return
         else:
             # 自动探测
-            repomd_url = f"{base_repo_url}/update/source/repodata/repomd.xml"
+            update_source_url = _get_update_source_url(base_repo_url)
+            repomd_url = (
+                f"{update_source_url}/{naming.REPOMD_RELATIVE_PATH}")
             logging.info(f"正在从 {repomd_url} 获取最新软件包信息...")
 
-            repomd_path = os.path.join(temp_dir, "repomd.xml")
+            repomd_path = os.path.join(temp_dir, naming.REPOMD_FILE_NAME)
             if not download_file(repomd_url, repomd_path):
                 logging.error(f"无法从 {base_repo_url} 获取数据，请检查网络连接或仓库地址。")
                 return
 
-            primary_url, repomd_date = _scan_repomd(repomd_path, base_repo_url)
+            primary_url, repomd_date = _scan_repomd(
+                repomd_path, update_source_url)
+            if not primary_url or not repomd_date:
+                logging.error(f"无法解析 {repomd_url} 中的 primary 数据。")
+                return
+
             primary_xml_path = os.path.join(
                 temp_dir, _extract_primary_xml(primary_url))
-            target_name = f"{base_repo_url}({repomd_date})"
+            modified_date = repomd_date.replace(naming.DATE_SEPARATOR, "")
 
             if not download_file(primary_url, primary_xml_path):
                 logging.error(f"从 {primary_url} 下载 primary.xml 时出错。")
                 return
+
+        target_name = _format_target_name(repo_name, modified_date)
+        paths = setup_paths(
+            args.output, repo_name, formatted_utc_time, target_name)
 
         packages, failed_packages = _scan_primary_xml(
             primary_xml_path, paths['data_dir'], args.disable_tqdm, config)

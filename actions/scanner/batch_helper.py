@@ -20,6 +20,7 @@ import subprocess
 import textwrap
 import csv
 from tabulate import tabulate
+from actions import naming
 from actions.scanner.src_package_helper import (
     scan_src_dir,
     scan_src_rpm
@@ -285,8 +286,8 @@ def _process_package_from_row(row, args, formatted_utc_time, config):
     logging.info(f"正在处理 {name}-{version}")
 
     try:
-        base_name = f"{name}-{version}_{formatted_utc_time}"
-        paths = setup_paths(args.output, base_name)
+        base_name = naming.build_package_name(name, version)
+        paths = setup_paths(args.output, base_name, formatted_utc_time)
         package = Package(name, version, None)
 
         scanned_files = _scan_source_code(

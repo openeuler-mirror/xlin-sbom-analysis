@@ -1,0 +1,33 @@
+{
+    "spdxVersion": "SPDX-2.3",
+    "dataLicense": "CC0-1.0",
+    "SPDXID": "SPDXRef-DOCUMENT",
+    "name": "minimal-sbom",
+    "documentNamespace": "https://example.com/spdx/minimal-sbom",
+    "creationInfo": {
+        "created": "2026-10-22T00:00:00Z",
+        "creators": [
+            "Tool: manual"
+        ]
+    },
+    "packages": [
+        {
+            "name": "foo",
+            "versionInfo": "1.0",
+            "SPDXID": "SPDXRef-Package-foo",
+            "downloadLocation": "NOASSERTION",
+            "filesAnalyzed": false,
+            "licenseConcluded": "MIT",
+            "licenseDeclared": "MIT",
+            "copyrightText": "NOASSERTION"
+        }
+    ],
+    "relationships": [
+        {
+            "spdxElementId": "SPDXRef-DOCUMENT",
+            "relationshipType": "DESCRIBES",
+            "relatedSpdxElement": "SPDXRef-Package-foo"
+        }
+    ],
+    "hasExtractedLicensingInfos": []
+}
