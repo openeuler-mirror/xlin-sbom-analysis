@@ -24,7 +24,7 @@ from actions.reporter.reporter_toolkit import (
     replace_placeholders
 )
 from actions.license_helper import LICENSE_CATEGORY_DETAILS
-from actions import ASSIST_DIR
+from actions import ASSIST_DIR, naming
 
 def _generate_license_section_docx(doc, license_summary, categorized_dict):
     """
@@ -209,7 +209,7 @@ def generate_docx_report(sbom_name, start_date, end_date, packages,
         _generate_vulnerability_table_docx(doc, packages)
 
         doc.add_paragraph(
-            f"完整漏洞特征数据详见分析记录目录。"
+            f"完整漏洞特征数据详见{naming.DATA_DIR_NAME}目录。"
         )
 
     # 2.2 许可证合规性分析
@@ -223,7 +223,8 @@ def generate_docx_report(sbom_name, start_date, end_date, packages,
             last_paragraph.alignment = WD_PARAGRAPH_ALIGNMENT.CENTER
 
         # 添加图注
-        caption = doc.add_paragraph(f"图1：{sbom_name} 许可证分布图")
+        caption = doc.add_paragraph(
+            f"图1：{sbom_name} {naming.LICENSE_PIE_CHART_NAME}")
         caption.style = "插图"
 
         # 生成许可证分析内容

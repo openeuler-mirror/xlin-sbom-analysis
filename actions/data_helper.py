@@ -20,6 +20,8 @@ import requests
 import datetime
 from pathlib import Path
 
+from actions import naming
+
 SUPPORTED_ARCHIVES = ('.tar', '.tar.gz', '.tgz', '.tar.xz', '.txz',
                       '.tar.bz2', '.tbz2', '.zip', '.7z')
 
@@ -120,7 +122,7 @@ def convert_docx_to_pdf(docx_path, output_dir):
         )
 
         # 检查是否生成PDF文件
-        pdf_path = os.path.join(output_dir, f"{filename}.pdf")
+        pdf_path = os.path.join(output_dir, f"{filename}.{naming.PDF_EXT}")
         if os.path.exists(pdf_path):
             return pdf_path
         else:
@@ -157,31 +159,50 @@ def download_file(url, dest_path):
         logging.error(f"下载文件失败: {e}")
         return False
     
-def setup_paths(output_base_dir, base_name_with_timestamp):
+def setup_paths(output_base_dir, base_name, timestamp, file_basename=None):
     """
     为给定的扫描目标统一创建并返回所有必需的路径。
 
     Args:
         output_base_dir (str): 用户指定的总输出目录。
-        base_name_with_timestamp (str): 带有时间戳的唯一基础名称，例如 "pkg-1.0_20250915123000"。
+        base_name (str): 结果文件夹的基础名称，例如 "pkg-1.0" 或发行版名称。
+        timestamp (str): 运行时间戳，格式为 YYYYMMDDHHMMSS。
+        file_basename (str, optional): 文件夹内文件的基础名称。未提供时使用 base_name。
 
     Returns:
         dict: 包含所有生成路径的字典。
     """
 
-    output_dir = os.path.join(output_base_dir, base_name_with_timestamp)
-    data_dir = os.path.join(output_dir, "分析记录")
+    if file_basename is None:
+        file_basename = base_name
+
+    output_dir = os.path.join(
+        output_base_dir,
+        naming.build_output_dir_name(base_name, timestamp))
+    data_dir = os.path.join(output_dir, naming.DATA_DIR_NAME)
     os.makedirs(data_dir, exist_ok=True)
+
+    def data_file(title, ext):
+        return os.path.join(
+            data_dir, naming.build_file_name(file_basename, title, ext))
 
     paths = {
         "output_dir": output_dir,
         "data_dir": data_dir,
-        "docx_report": os.path.join(output_dir, f"{base_name_with_timestamp} 安全引入评估报告.docx"),
-        "licenses_pie_chart": os.path.join(data_dir, f"{base_name_with_timestamp} 许可证分布图.png"),
-        "dep_scan_results": os.path.join(data_dir, f"{base_name_with_timestamp} 依赖项扫描结果.json"),
-        "files_info": os.path.join(data_dir, f"{base_name_with_timestamp} 文件级许可证信息.json"),
-        "dep_licenses_pie_chart": os.path.join(data_dir, f"{base_name_with_timestamp} 依赖项许可证分布图.png"),
-        "vulns_record": os.path.join(data_dir, f"{base_name_with_timestamp} 漏洞扫描结果.json"),
+        "docx_report": os.path.join(
+            output_dir,
+            naming.build_file_name(
+                file_basename, naming.REPORT_NAME, naming.DOCX_EXT)),
+        "licenses_pie_chart": data_file(
+            naming.LICENSE_PIE_CHART_NAME, naming.PNG_EXT),
+        "dep_scan_results": data_file(
+            naming.DEP_SCAN_RESULTS_NAME, naming.JSON_EXT),
+        "files_info": data_file(
+            naming.FILES_INFO_NAME, naming.JSON_EXT),
+        "dep_licenses_pie_chart": data_file(
+            naming.DEP_LICENSE_PIE_CHART_NAME, naming.PNG_EXT),
+        "vulns_record": data_file(
+            naming.VULN_RESULTS_NAME, naming.JSON_EXT),
     }
     return paths
 
@@ -205,7 +226,7 @@ def get_scan_dates(config):
         date = config.get('general', {}).get('date_setting', {}).get('date')
         return date, date
     else:
-        today_str = datetime.date.today().strftime("%Y-%m-%d")
+        today_str = datetime.date.today().strftime(naming.DATE_FORMAT)
         return today_str, today_str
 
 
